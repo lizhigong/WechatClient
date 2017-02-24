@@ -9,6 +9,7 @@ import re
 import random
 import xml.dom.minidom
 from safesession import SafeSession
+import json
 
 
 class WeChat:
@@ -31,17 +32,25 @@ class WeChat:
         self.pass_ticket = ''
         self.device_id = 'e' + repr(random.random())[2:17]
         self.base_request = {}
+        self.sync_key = []
+        self.sync_check_key = ''  # formatted sync key for sync check
+        self.user_info = {}
 
     def run(self):
         self.get_uuid()
         self.get_qrcode(os.path.join(self.resource_dir, 'qr.png'))
 
         result = self.wait_for_login()
-        print result
+        print 'wait_for_login : {r}'.format(r=result)
 
         result = self.sync_login()
-        print result
+        print 'sync_login : {r}'.format(r=result)
 
+        result = self.wechat_init()
+        print 'wechat_init : {r}'.format(r=result)
+
+        result = self.status_notify()
+        print 'status_notify : {r}'.format(r=result)
 
     def get_uuid(self):
         url = 'https://login.weixin.qq.com/jslogin'
@@ -128,8 +137,7 @@ class WeChat:
             # https://wx.qq.com/cgi-bin/mmwebwx-bin/webwxnewloginpage?ticket=xxx&uuid=xxx&lang=xxx&scan=xxx&fun=new
         r.encoding = 'utf-8'
         data = r.text
-        doc = xml.dom.minidom.parseString(data)
-        root = doc.documentElement
+        root = xml.dom.minidom.parseString(data).documentElement
 
         for node in root.childNodes:
             if node.nodeName == 'wxuin':
@@ -151,6 +159,35 @@ class WeChat:
             'DeviceID': self.device_id,
         }
         return True
+
+    def wechat_init(self):
+        url = self.base_uri + '/webwxinit?r=%i&lang=en_US&pass_ticket=%s&skey=%s' \
+                              % (int(time.time()), self.pass_ticket, self.skey)
+        params = {
+            'BaseRequest': self.base_request
+        }
+        r = self.session.post(url, data=json.dumps(params))
+        r.encoding = self.encoding
+        result = json.loads(r.text)
+        self.sync_key = result['SyncKey']
+        self.sync_check_key = '|'.join(
+            [str(keyVal['Key']) + '_' + str(keyVal['Val']) for keyVal in self.sync_key['List']])
+        self.user_info = result['User']
+        return result['BaseResponse']['Ret'] == 0
+
+    def status_notify(self):
+        url = self.base_uri + '/webwxstatusnotify?lang=zh_CN&pass_ticket=%s' % self.pass_ticket
+        params = {
+            'BaseRequest': self.base_request,
+            "Code": 3,
+            "FromUserName": self.user_info['UserName'],
+            "ToUserName": self.user_info['UserName'],
+            "ClientMsgId": int(time.time())
+        }
+        r = self.session.post(url, data=json.dumps(params))
+        r.encoding = self.encoding
+        result = json.loads(r.text)
+        return result['BaseResponse']['Ret'] == 0
 
     def format_username(user_name):
         return {"UserName": user_name, "EncryChatRoomId": ""}
