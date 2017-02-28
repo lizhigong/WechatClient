@@ -34,7 +34,30 @@ class WeChat:
         self.base_request = {}
         self.sync_key = []
         self.sync_check_key = ''  # formatted sync key for sync check
-        self.user_info = {}
+
+        self.user_info = {}  # UserName->id, NickName->nickname, HeadImgUrl
+        self.account_info = {'group_member': {}, 'normal_member': {}}  # all the accounts
+        # format {'group_member':{'id':{'type':'group_member', 'info':{}}, ...}, 'normal_member':{'id':{}, ...}}
+
+        self.contact_list = []  # contacts
+        self.public_list = []  # public accounts
+        self.special_list = []  # special accounts
+        self.default_special_accounts = ['newsapp', 'filehelper', 'weibo', 'qqmail',
+                 'fmessage', 'tmessage', 'qmessage', 'qqsync', 'floatbottle',
+                 'lbsapp', 'shakeapp', 'medianote', 'qqfriend', 'readerapp',
+                 'blogapp', 'facebookapp', 'masssendapp', 'meishiapp',
+                 'feedsapp', 'voip', 'blogappweixin', 'weixin', 'brandsessionholder',
+                 'weixinreminder', 'wxid_novlwrv3lqwv11',
+                 'officialaccounts',
+                 'gh_22b87fa7cb3c', 'wxitil', 'userexperience_alarm',
+                 'notification_messages', 'notifymessage']  # all known special accounts, always default accounts
+        self.group_list = []  # group chats
+
+        self.group_members_list = {}  # members of all the group chats
+        # format {'group_id':[member, member, ...]}
+
+        self.encry_chat_room_id_list = []  # for group members' head img
+
 
     def run(self):
         self.get_uuid()
@@ -51,6 +74,26 @@ class WeChat:
 
         result = self.status_notify()
         print 'status_notify : {r}'.format(r=result)
+
+        if self.get_contact():
+            print 'get_contacts:'
+            print '%d contacts' % len(self.contact_list)
+            # print self.contact_list
+            # print self.group_members_list
+            with open(os.path.join(self.resource_dir, 'contact_list.json'), 'w') as f:
+                f.write(json.dumps(self.contact_list))
+            with open(os.path.join(self.resource_dir, 'special_list.json'), 'w') as f:
+                f.write(json.dumps(self.special_list))
+            with open(os.path.join(self.resource_dir, 'group_list.json'), 'w') as f:
+                f.write(json.dumps(self.group_list))
+            with open(os.path.join(self.resource_dir, 'public_list.json'), 'w') as f:
+                f.write(json.dumps(self.public_list))
+            with open(os.path.join(self.resource_dir, 'group_list.json'), 'w') as f:
+                f.write(json.dumps(self.group_list))
+            with open(os.path.join(self.resource_dir, 'group_members_list.json'), 'w') as f:
+                f.write(json.dumps(self.group_members_list))
+            with open(os.path.join(self.resource_dir, 'account_info.json'), 'w') as f:
+                f.write(json.dumps(self.account_info))
 
     def get_uuid(self):
         url = 'https://login.weixin.qq.com/jslogin'
@@ -170,9 +213,10 @@ class WeChat:
         r.encoding = self.encoding
         result = json.loads(r.text)
         self.sync_key = result['SyncKey']
-        self.sync_check_key = '|'.join(
-            [str(keyVal['Key']) + '_' + str(keyVal['Val']) for keyVal in self.sync_key['List']])
+        self.sync_check_key = '|'.join([str(keyVal['Key']) + '_' + str(keyVal['Val'])
+                                        for keyVal in self.sync_key['List']])
         self.user_info = result['User']
+        #print self.user_info
         return result['BaseResponse']['Ret'] == 0
 
     def status_notify(self):
@@ -188,6 +232,87 @@ class WeChat:
         r.encoding = self.encoding
         result = json.loads(r.text)
         return result['BaseResponse']['Ret'] == 0
+
+    def refresh_contact(self):
+        self.contact_list = []
+        self.public_list = []
+        self.group_list = []
+
+    def get_contact(self):
+        url = self.base_uri + '/webwxgetcontact?pass_ticket=%s&skey=%s&r=%s' \
+                              % (self.pass_ticket, self.skey, int(time.time()))
+        params = {}
+        r = self.session.post(url, data=json.dumps(params))
+        if r == '':
+            return False
+
+        r.encoding = self.encoding
+        result = json.loads(r.text)
+        self.group_members_list = result['MemberList']
+        self.refresh_contact()
+
+        for contact in self.group_members_list:
+            if contact['VerifyFlag'] & 8 != 0:
+                self.public_list.append(contact)
+                self.account_info['normal_member'][contact['UserName']] = {'type': 'public', 'info': contact}
+            elif contact['UserName'] in self.default_special_accounts:
+                self.special_list.append(contact)
+                self.account_info['normal_member'][contact['UserName']] = {'type': 'special', 'info': contact}
+            elif contact['UserName'].find('@@') != -1:
+                self.group_list.append(contact)
+                self.account_info['normal_member'][contact['UserName']] = {'type': 'group', 'info': contact}
+            elif contact['UserName'] == self.user_info['UserName']:
+                self.account_info['normal_member'][contact['UserName']] = {'type': 'self', 'info': contact}
+            else:
+                self.contact_list.append(contact)
+                self.account_info['normal_member'][contact['UserName']] = {'type': 'unknown', 'info': contact}
+
+        url = self.base_uri + '/webwxbatchgetcontact?type=ex&r=%s&pass_ticket=%s' % (int(time.time()), self.pass_ticket)
+        params = {
+            'BaseRequest': self.base_request,
+            "Count": len(self.group_list),
+            "List": [{"UserName": group['UserName'], "EncryChatRoomId": ""} for group in self.group_list]
+        }
+        r = self.session.post(url, data=json.dumps(params))
+        r.encoding = self.encoding
+        dic = json.loads(r.text)
+        group_members = {}
+        encry_chat_room_id = {}
+        for group in dic['ContactList']:
+            gid = group['UserName']
+            members = group['MemberList']
+            group_members[gid] = members
+            encry_chat_room_id[gid] = group['EncryChatRoomId']
+        self.group_members_list = group_members
+        self.encry_chat_room_id_list = encry_chat_room_id
+
+        for group in self.group_members_list:
+            for member in self.group_members_list[group]:
+                if member['UserName'] not in self.account_info:
+                    self.account_info['group_member'][member['UserName']] = \
+                        {'type': 'group_member', 'info': member, 'group': group}
+
+        return True
+
+    def sync(self):
+        url = self.base_uri + '/webwxsync?sid=%s&skey=%s&lang=en_US&pass_ticket=%s' \
+                              % (self.sid, self.skey, self.pass_ticket)
+        params = {
+            'BaseRequest': self.base_request,
+            'SyncKey': self.sync_key,
+            'rr': ~int(time.time())
+        }
+        try:
+            r = self.session.post(url, data=json.dumps(params), timeout=60)
+            r.encoding = self.encoding
+            result = json.loads(r.text)
+            if result['BaseResponse']['Ret'] == 0:
+                self.sync_key = result['SyncKey']
+                self.sync_check_key = '|'.join([str(keyVal['Key']) + '_' + str(keyVal['Val'])
+                                              for keyVal in self.sync_key['List']])
+            return result
+        except:
+            return None
 
     def format_username(user_name):
         return {"UserName": user_name, "EncryChatRoomId": ""}
