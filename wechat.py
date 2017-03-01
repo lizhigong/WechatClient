@@ -10,6 +10,7 @@ import random
 import xml.dom.minidom
 from safesession import SafeSession
 import json
+from collections import defaultdict
 
 
 class WeChat:
@@ -58,42 +59,95 @@ class WeChat:
 
         self.encry_chat_room_id_list = []  # for group members' head img
 
+    def _refresh_contact(self):
+        self.contact_list = []
+        self.public_list = []
+        self.group_list = []
+
+    def get_display_name(self, id):
+        # [TODO]
+        name = 'Unknown'
+        if id == self.user_info['UserName']:
+            return self.user_info['NickName']  # 自己
+
+        if id[:2] == '@@':
+            # group chat
+            # name = self.getGroupName(id)
+            name = 'Group Chat'
+        else:
+            # special
+            for member in self.special_list:
+                if member['UserName'] == id:
+                    name = member['RemarkName'] if member[
+                        'RemarkName'] else member['NickName']
+
+            # public
+            for member in self.public_list:
+                if member['UserName'] == id:
+                    name = member['RemarkName'] if member[
+                        'RemarkName'] else member['NickName']
+
+            # contact
+            for member in self.contact_list:
+                if member['UserName'] == id:
+                    name = member['RemarkName'] if member[
+                        'RemarkName'] else member['NickName']
+
+            # group chat members
+
+        return name
+
+    def get_msg_image(self, msg_id):
+        # [TODO]
+        return None
+
+    def get_msg_voice(self, msg_id):
+        # [TODO]
+        return None
+
+    def get_msg_video(self, msg_id):
+        # [TODO]
+        return None
 
     def run(self):
-        self.get_uuid()
-        self.get_qrcode(os.path.join(self.resource_dir, 'qr.png'))
+        try:
+            self.get_uuid()
+            self.get_qrcode(os.path.join(self.resource_dir, 'qr.png'))
 
-        result = self.wait_for_login()
-        print 'wait_for_login : {r}'.format(r=result)
+            result = self.wait_for_login()
+            print 'wait_for_login : {r}'.format(r=result)
 
-        result = self.sync_login()
-        print 'sync_login : {r}'.format(r=result)
+            result = self.sync_login()
+            print 'sync_login : {r}'.format(r=result)
 
-        result = self.wechat_init()
-        print 'wechat_init : {r}'.format(r=result)
+            result = self.wechat_init()
+            print 'wechat_init : {r}'.format(r=result)
 
-        result = self.status_notify()
-        print 'status_notify : {r}'.format(r=result)
+            result = self.status_notify()
+            print 'status_notify : {r}'.format(r=result)
 
-        if self.get_contact():
-            print 'get_contacts:'
-            print '%d contacts' % len(self.contact_list)
-            # print self.contact_list
-            # print self.group_members_list
-            with open(os.path.join(self.resource_dir, 'contact_list.json'), 'w') as f:
-                f.write(json.dumps(self.contact_list))
-            with open(os.path.join(self.resource_dir, 'special_list.json'), 'w') as f:
-                f.write(json.dumps(self.special_list))
-            with open(os.path.join(self.resource_dir, 'group_list.json'), 'w') as f:
-                f.write(json.dumps(self.group_list))
-            with open(os.path.join(self.resource_dir, 'public_list.json'), 'w') as f:
-                f.write(json.dumps(self.public_list))
-            with open(os.path.join(self.resource_dir, 'group_list.json'), 'w') as f:
-                f.write(json.dumps(self.group_list))
-            with open(os.path.join(self.resource_dir, 'group_members_list.json'), 'w') as f:
-                f.write(json.dumps(self.group_members_list))
-            with open(os.path.join(self.resource_dir, 'account_info.json'), 'w') as f:
-                f.write(json.dumps(self.account_info))
+            if self.get_contact():
+                print 'get_contacts:'
+                print '%d contacts' % len(self.contact_list)
+                # print self.contact_list
+                # print self.group_members_list
+                with open(os.path.join(self.resource_dir, 'contact_list.json'), 'w') as f:
+                    f.write(json.dumps(self.contact_list))
+                with open(os.path.join(self.resource_dir, 'special_list.json'), 'w') as f:
+                    f.write(json.dumps(self.special_list))
+                with open(os.path.join(self.resource_dir, 'group_list.json'), 'w') as f:
+                    f.write(json.dumps(self.group_list))
+                with open(os.path.join(self.resource_dir, 'public_list.json'), 'w') as f:
+                    f.write(json.dumps(self.public_list))
+                with open(os.path.join(self.resource_dir, 'group_list.json'), 'w') as f:
+                    f.write(json.dumps(self.group_list))
+                with open(os.path.join(self.resource_dir, 'group_members_list.json'), 'w') as f:
+                    f.write(json.dumps(self.group_members_list))
+                with open(os.path.join(self.resource_dir, 'account_info.json'), 'w') as f:
+                    f.write(json.dumps(self.account_info))
+
+        except KeyboardInterrupt:
+            print '^c command : QUIT'
 
     def get_uuid(self):
         url = 'https://login.weixin.qq.com/jslogin'
@@ -122,7 +176,7 @@ class WeChat:
         else:
             from pipes import quote
 
-        if sys.platform == "darwin":
+        if sys.platform.find('darwin') >= 0:
             command = "open -a /Applications/Preview.app %s&" % quote(qrcode_path)
             os.system(command)
         else:
@@ -222,21 +276,16 @@ class WeChat:
     def status_notify(self):
         url = self.base_uri + '/webwxstatusnotify?lang=zh_CN&pass_ticket=%s' % self.pass_ticket
         params = {
-            'BaseRequest': self.base_request,
-            "Code": 3,
-            "FromUserName": self.user_info['UserName'],
-            "ToUserName": self.user_info['UserName'],
-            "ClientMsgId": int(time.time())
+            'BaseRequest'   : self.base_request,
+            "Code"          : 3,
+            "FromUserName"  : self.user_info['UserName'],
+            "ToUserName"    : self.user_info['UserName'],
+            "ClientMsgId"   : int(time.time())
         }
         r = self.session.post(url, data=json.dumps(params))
         r.encoding = self.encoding
         result = json.loads(r.text)
         return result['BaseResponse']['Ret'] == 0
-
-    def refresh_contact(self):
-        self.contact_list = []
-        self.public_list = []
-        self.group_list = []
 
     def get_contact(self):
         url = self.base_uri + '/webwxgetcontact?pass_ticket=%s&skey=%s&r=%s' \
@@ -249,7 +298,7 @@ class WeChat:
         r.encoding = self.encoding
         result = json.loads(r.text)
         self.group_members_list = result['MemberList']
-        self.refresh_contact()
+        self._refresh_contact()
 
         for contact in self.group_members_list:
             if contact['VerifyFlag'] & 8 != 0:
@@ -269,9 +318,9 @@ class WeChat:
 
         url = self.base_uri + '/webwxbatchgetcontact?type=ex&r=%s&pass_ticket=%s' % (int(time.time()), self.pass_ticket)
         params = {
-            'BaseRequest': self.base_request,
-            "Count": len(self.group_list),
-            "List": [{"UserName": group['UserName'], "EncryChatRoomId": ""} for group in self.group_list]
+            'BaseRequest'   : self.base_request,
+            "Count"         : len(self.group_list),
+            "List"          : [{"UserName": group['UserName'], "EncryChatRoomId": ""} for group in self.group_list]
         }
         r = self.session.post(url, data=json.dumps(params))
         r.encoding = self.encoding
@@ -298,21 +347,105 @@ class WeChat:
         url = self.base_uri + '/webwxsync?sid=%s&skey=%s&lang=en_US&pass_ticket=%s' \
                               % (self.sid, self.skey, self.pass_ticket)
         params = {
-            'BaseRequest': self.base_request,
-            'SyncKey': self.sync_key,
-            'rr': ~int(time.time())
+            'BaseRequest'   : self.base_request,
+            'SyncKey'       : self.sync_key,
+            'rr'            : ~int(time.time())
         }
-        try:
-            r = self.session.post(url, data=json.dumps(params), timeout=60)
-            r.encoding = self.encoding
-            result = json.loads(r.text)
-            if result['BaseResponse']['Ret'] == 0:
-                self.sync_key = result['SyncKey']
-                self.sync_check_key = '|'.join([str(keyVal['Key']) + '_' + str(keyVal['Val'])
-                                              for keyVal in self.sync_key['List']])
-            return result
-        except:
+        r = self.session.post(url, data=json.dumps(params), timeout=60)
+        if r == '':
             return None
+        r.encoding = self.encoding
+        result = json.loads(r.text)
+        if result['BaseResponse']['Ret'] == 0:
+            self.sync_key = result['SyncKey']
+            self.sync_check_key = '|'.join([str(keyVal['Key']) + '_' + str(keyVal['Val'])
+                                            for keyVal in self.sync_key['List']])
+        return result
 
-    def format_username(user_name):
+    def search_content(self, key, content, ft):
+        if ft == 'attr':  # key is an attribution of a xml label
+            pm = re.search(key + '\s?=\s?"([^"<]+)"', content)
+            if pm:
+                return pm.group(1)
+        elif ft == 'xml':  # key is a xml label
+            pm = re.search('<{0}>([^<]+)</{0}>'.format(key), content)
+            if not pm:
+                pm = re.search(
+                    '<{0}><\!\[CDATA\[(.*?)\]\]></{0}>'.format(key), content)
+            if pm:
+                return pm.group(1)
+        return None
+
+    def custom_message_receiver(self, msg):
+        # add custom message receiver by inheriting this func
+        pass
+
+    def message_handler(self, r):
+        for msg in r['AddMsgList']:
+            print('[*] 你有新的消息，请注意查收')
+
+            msg_type = msg['MsgType']
+            name = self.get_display_name(msg['FromUserName'])
+            content = msg['Content'].replace('&lt;', '<').replace('&gt;', '>')
+            msg_id = msg['MsgId']
+            hint_msg = ''
+
+            if msg_type == 1:  # text
+                hint_msg = msg
+
+            elif msg_type == 3:  # image
+                image = self.get_msg_image(msg_id)
+                hint_msg = '%s 发送了一张图片: %s' % (name, image)
+
+            elif msg_type == 34:  # voice
+                voice = self.get_msg_voice(msg_id)
+                hint_msg = '%s 发了一段语音: %s' % (name, voice)
+
+            elif msg_type == 42:  # recommend card
+                info = msg['RecommendInfo']
+                print('%s 发送了一张名片:' % name)
+                print('  昵称: %s' % info['NickName'])
+                print('  微信号: %s' % info['Alias'])
+                print('  地区: %s %s' % (info['Province'], info['City']))
+                print('  性别: %s' % ['未知', '男', '女'][info['Sex']])
+            elif msg_type == 47:  # emotion
+                url = self.search_content('cdnurl', content, 'attr')
+                hint_msg = '%s 发了一个动画表情，点击下面链接查看: %s' % (name, url)
+
+            elif msg_type == 49:  # link
+                app_msg_type = defaultdict(lambda: "")
+                app_msg_type.update({5: '链接', 3: '音乐', 7: '微博'})
+                print('%s 分享了一个%s:' % (name, app_msg_type[msg['AppMsgType']]))
+                print('  标题: %s' % msg['FileName'])
+                print('  描述: %s' % self.search_content('des', content, 'xml'))
+                print('  链接: %s' % msg['Url'])
+                print('  来自: %s' % self.search_content('appname', content, 'xml'))
+                card = {
+                    'title': msg['FileName'],
+                    'description': self.search_content('des', content, 'xml'),
+                    'url': msg['Url'],
+                    'appname': self.search_content('appname', content, 'xml')
+                }
+                hint_msg = '%s 分享了一个%s: %s' % (name, app_msg_type[msg['AppMsgType']], json.dumps(card))
+
+            elif msg_type == 51:  # init message
+                hint_msg = '  成功获取联系人信息'
+
+            elif msg_type == 62:  # video
+                video = self.get_msg_video(msg_id)
+                hint_msg = '%s 发了一段小视频: %s' % (name, video)
+
+            elif msg_type == 10002:  # recall
+                hint_msg = '%s 撤回了一条消息' % name
+
+            else:  # unknown
+                hint_msg = '[*] 该消息类型为: %d，可能是表情，图片, 链接或红包' % msg['MsgType']
+
+            # add custom message receiver
+            msg = {
+                "hint"  : hint_msg
+            }
+            self.custom_message_receiver(msg)
+
+    def format_username(self, user_name):
         return {"UserName": user_name, "EncryChatRoomId": ""}
