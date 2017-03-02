@@ -506,3 +506,42 @@ class WeChat:
                 "hint"          :    hint_msg
             }
             self.custom_message_receiver(msg)
+
+    def message_listener(self):
+        self.choose_sync_host()
+        while True:
+            current_check_time = time.time()
+            [retcode, selector] = self.sync_check()
+            if retcode == '1100':  # logout / fail to login
+                break
+            elif retcode == '1101':  # login at another device
+                break
+            elif retcode == '0':
+                # print '[DEBUG] selector_check:', retcode, selector
+                if selector == '2':  # new message
+                    r = self.sync()
+                    if r is not None:
+                        self.message_handler(r)
+                elif selector == '3':  #
+                    r = self.sync()
+                    if r is not None:
+                        self.message_handler(r)
+                elif selector == '4':  # contact update
+                    r = self.sync()
+                    if r is not None:
+                        self.get_contact()
+                elif selector == '6':  #
+                    r = self.sync()
+                    if r is not None:
+                        self.message_handler(r)
+                elif selector == '7':  # operate on phone
+                    r = self.sync()
+                    if r is not None:
+                        self.message_handler(r)
+                elif selector == '0':  # none
+                    pass
+                else:
+                    print '[ERROR] Unknown error'
+            current_check_time = time.time() - current_check_time
+            if current_check_time < self.sync_time_interval:
+                time.sleep(self.sync_time_interval - current_check_time)
