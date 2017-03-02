@@ -98,16 +98,34 @@ class WeChat:
         return name
 
     def get_msg_image(self, msg_id):
-        # [TODO]
-        return None
+        url = self.base_uri + '/webwxgetmsgimg?MsgID=%s&skey=%s' % (msg_id, self.skey)
+        r = self.session.get(url)
+        data = r.content
+        fn = 'img_' + msg_id + '.jpg'
+        with open(os.path.join(self.resource_dir, 'image', fn), 'wb') as f:
+            f.write(data)
+        return fn
 
     def get_msg_voice(self, msg_id):
-        # [TODO]
-        return None
+        url = self.base_uri + '/webwxgetvoice?msgid=%s&skey=%s' % (msg_id, self.skey)
+        r = self.session.get(url)
+        data = r.content
+        fn = 'voice_' + msg_id + '.mp3'
+        with open(os.path.join(self.resource_dir, 'voice', fn), 'wb') as f:
+            f.write(data)
+        return fn
 
     def get_msg_video(self, msg_id):
-        # [TODO]
-        return None
+        url = self.base_uri + '/webwxgetvideo?msgid=%s&skey=%s' % (msg_id, self.skey)
+        headers = {
+            'Range': 'bytes=0-'
+        }
+        r = self.session.get(url, headers=headers)
+        data = r.content
+        fn = 'video_' + msg_id + '.mp4'
+        with open(os.path.join(self.resource_dir, 'video', fn), 'wb') as f:
+            f.write(data)
+        return fn
 
     def run(self):
         try:
@@ -364,16 +382,16 @@ class WeChat:
 
     def search_content(self, key, content, ft):
         if ft == 'attr':  # key is an attribution of a xml label
-            pm = re.search(key + '\s?=\s?"([^"<]+)"', content)
-            if pm:
-                return pm.group(1)
+            result = re.search(key + '\s?=\s?"([^"<]+)"', content)
+            if result:
+                return result.group(1)
         elif ft == 'xml':  # key is a xml label
-            pm = re.search('<{0}>([^<]+)</{0}>'.format(key), content)
-            if not pm:
-                pm = re.search(
-                    '<{0}><\!\[CDATA\[(.*?)\]\]></{0}>'.format(key), content)
-            if pm:
-                return pm.group(1)
+            result = re.search('<{0}>([^<]+)</{0}>'.format(key), content)
+            if not result:
+                result = re.search(
+                    '<{0}><!\[CDATA\[(.*?)\]\]></{0}>'.format(key), content)
+            if result:
+                return result.group(1)
         return None
 
     def custom_message_receiver(self, msg):
