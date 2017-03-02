@@ -22,6 +22,20 @@ class WeChat:
         self.resource_dir = os.path.join(os.getcwd(),'temp')
         self.login_retry_times = 10
         self.login_retry_interval = 1  # seconds
+        self.timeout = 60  # seconds
+        self.sync_time_interval = 1  # seconds
+        self.default_sync_host = ['webpush.wx.qq.com', 'webpush2.wx.qq.com', 'webpush.wechat.com',
+                                  'webpush1.wechat.com', 'webpush2.wechat.com', 'webpush.wechatapp.com',
+                                  'webpush1.wechatapp.com']  # sync check hosts
+        self.default_special_accounts = ['newsapp', 'filehelper', 'weibo', 'qqmail',
+                 'fmessage', 'tmessage', 'qmessage', 'qqsync', 'floatbottle',
+                 'lbsapp', 'shakeapp', 'medianote', 'qqfriend', 'readerapp',
+                 'blogapp', 'facebookapp', 'masssendapp', 'meishiapp',
+                 'feedsapp', 'voip', 'blogappweixin', 'weixin', 'brandsessionholder',
+                 'weixinreminder', 'wxid_novlwrv3lqwv11',
+                 'officialaccounts',
+                 'gh_22b87fa7cb3c', 'wxitil', 'userexperience_alarm',
+                 'notification_messages', 'notifymessage']  # all known special accounts, always default accounts
 
         self.uuid = ''
         self.redirect_uri = ''
@@ -35,6 +49,7 @@ class WeChat:
         self.base_request = {}
         self.sync_key = []
         self.sync_check_key = ''  # formatted sync key for sync check
+        self.sync_check_host = ''
 
         self.user_info = {}  # UserName->id, NickName->nickname, HeadImgUrl
         self.account_info = {'group_member': {}, 'normal_member': {}}  # all the accounts
@@ -43,15 +58,6 @@ class WeChat:
         self.contact_list = []  # contacts
         self.public_list = []  # public accounts
         self.special_list = []  # special accounts
-        self.default_special_accounts = ['newsapp', 'filehelper', 'weibo', 'qqmail',
-                 'fmessage', 'tmessage', 'qmessage', 'qqsync', 'floatbottle',
-                 'lbsapp', 'shakeapp', 'medianote', 'qqfriend', 'readerapp',
-                 'blogapp', 'facebookapp', 'masssendapp', 'meishiapp',
-                 'feedsapp', 'voip', 'blogappweixin', 'weixin', 'brandsessionholder',
-                 'weixinreminder', 'wxid_novlwrv3lqwv11',
-                 'officialaccounts',
-                 'gh_22b87fa7cb3c', 'wxitil', 'userexperience_alarm',
-                 'notification_messages', 'notifymessage']  # all known special accounts, always default accounts
         self.group_list = []  # group chats
 
         self.group_members_list = {}  # members of all the group chats
@@ -163,6 +169,8 @@ class WeChat:
                     f.write(json.dumps(self.group_members_list))
                 with open(os.path.join(self.resource_dir, 'account_info.json'), 'w') as f:
                     f.write(json.dumps(self.account_info))
+
+            self.message_listener()
 
         except KeyboardInterrupt:
             print '^c command : QUIT'
@@ -361,6 +369,36 @@ class WeChat:
 
         return True
 
+    def sync_check(self):  # return [retcode, selector]
+        url = 'https://' + self.sync_check_host + '/cgi-bin/mmwebwx-bin/synccheck?'
+        params = {
+            'r': int(time.time()),
+            'sid': self.sid,
+            'uin': self.uin,
+            'skey': self.skey,
+            'deviceid': self.device_id,
+            'synckey': self.sync_check_key,
+            '_': int(time.time()),
+        }
+
+        r = self.session.get(url, params=params, timeout=60)
+        if r == '':
+            return [-1, -1]
+        r.encoding = self.encoding
+        data = r.text
+        result = re.search(r'window.synccheck=\{retcode:"(\d+)",selector:"(\d+)"\}', data)
+        retcode = result.group(1)
+        selector = result.group(2)
+        return [retcode, selector]
+
+    def choose_sync_host(self):
+        for host in self.default_sync_host:
+            self.sync_check_host = host
+            retcode = self.sync_check()[0]
+            if retcode == '0':
+                return True
+        return False
+
     def sync(self):
         url = self.base_uri + '/webwxsync?sid=%s&skey=%s&lang=en_US&pass_ticket=%s' \
                               % (self.sid, self.skey, self.pass_ticket)
@@ -396,12 +434,11 @@ class WeChat:
 
     def custom_message_receiver(self, msg):
         # add custom message receiver by inheriting this func
+        print msg["hint"]
         pass
 
     def message_handler(self, r):
         for msg in r['AddMsgList']:
-            print('[*] 你有新的消息，请注意查收')
-
             msg_type = msg['MsgType']
             name = self.get_display_name(msg['FromUserName'])
             content = msg['Content'].replace('&lt;', '<').replace('&gt;', '>')
@@ -413,57 +450,59 @@ class WeChat:
 
             elif msg_type == 3:  # image
                 image = self.get_msg_image(msg_id)
-                hint_msg = '%s 发送了一张图片: %s' % (name, image)
+                hint_msg = '%s send you image: %s' % (name, image)
 
             elif msg_type == 34:  # voice
                 voice = self.get_msg_voice(msg_id)
-                hint_msg = '%s 发了一段语音: %s' % (name, voice)
+                hint_msg = '%s send you voice: %s' % (name, voice)
 
             elif msg_type == 42:  # recommend card
                 info = msg['RecommendInfo']
-                print('%s 发送了一张名片:' % name)
-                print('  昵称: %s' % info['NickName'])
-                print('  微信号: %s' % info['Alias'])
-                print('  地区: %s %s' % (info['Province'], info['City']))
-                print('  性别: %s' % ['未知', '男', '女'][info['Sex']])
+                # print('%s send you recommend:' % name)
+                # print('  nickname   : %s' % info['NickName'])
+                # print('  alias      : %s' % info['Alias'])
+                # print('  district   : %s %s' % (info['Province'], info['City']))
+                # print('  gender        : %s' % ['未知', '男', '女'][info['Sex']])
             elif msg_type == 47:  # emotion
                 url = self.search_content('cdnurl', content, 'attr')
-                hint_msg = '%s 发了一个动画表情，点击下面链接查看: %s' % (name, url)
+                hint_msg = '%s send you emotion: %s' % (name, url)
 
             elif msg_type == 49:  # link
                 app_msg_type = defaultdict(lambda: "")
-                app_msg_type.update({5: '链接', 3: '音乐', 7: '微博'})
-                print('%s 分享了一个%s:' % (name, app_msg_type[msg['AppMsgType']]))
-                print('  标题: %s' % msg['FileName'])
-                print('  描述: %s' % self.search_content('des', content, 'xml'))
-                print('  链接: %s' % msg['Url'])
-                print('  来自: %s' % self.search_content('appname', content, 'xml'))
+                app_msg_type.update({5: 'link', 3: 'music', 7: 'weibo'})  # red package 2001
+                # print('%s share %s:' % (name, app_msg_type[msg['AppMsgType']]))
+                # print('  title          : %s' % msg['FileName'])
+                # print('  description    : %s' % self.search_content('des', content, 'xml'))
+                # print('  link           : %s' % msg['Url'])
+                # print('  from           : %s' % self.search_content('appname', content, 'xml'))
                 card = {
                     'title': msg['FileName'],
                     'description': self.search_content('des', content, 'xml'),
                     'url': msg['Url'],
                     'appname': self.search_content('appname', content, 'xml')
                 }
-                hint_msg = '%s 分享了一个%s: %s' % (name, app_msg_type[msg['AppMsgType']], json.dumps(card))
+                hint_msg = '%s shared %s: %s' % (name, app_msg_type[msg['AppMsgType']], json.dumps(card))
 
             elif msg_type == 51:  # init message
-                hint_msg = '  成功获取联系人信息'
+                #hint_msg = '  contact init'
+                pass
 
             elif msg_type == 62:  # video
                 video = self.get_msg_video(msg_id)
-                hint_msg = '%s 发了一段小视频: %s' % (name, video)
+                hint_msg = '%s send you video : %s' % (name, video)
 
             elif msg_type == 10002:  # recall
-                hint_msg = '%s 撤回了一条消息' % name
+                hint_msg = '%s has recalled a message' % name
 
             else:  # unknown
-                hint_msg = '[*] 该消息类型为: %d，可能是表情，图片, 链接或红包' % msg['MsgType']
+                hint_msg = 'message type: %d, unknown message(maybe view it on phone)' % msg['MsgType']
 
             # add custom message receiver
             msg = {
-                "hint"  : hint_msg
+                "msg_type_id"   :   msg_type,
+                "msg_id"        :   msg_id,
+                "user_id"       :   msg['FromUserName'],
+                "to_user_id"    :   msg['ToUserName'],
+                "hint"          :    hint_msg
             }
             self.custom_message_receiver(msg)
-
-    def format_username(self, user_name):
-        return {"UserName": user_name, "EncryChatRoomId": ""}
