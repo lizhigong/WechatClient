@@ -74,11 +74,10 @@ class WeChat:
         # [TODO]
         name = 'Unknown'
         if id == self.user_info['UserName']:
-            return self.user_info['NickName']  # 自己
+            return self.user_info['NickName']  # self
 
         if id[:2] == '@@':
             # group chat
-            # name = self.getGroupName(id)
             name = 'Group Chat'
         else:
             # special
@@ -151,8 +150,7 @@ class WeChat:
             print 'status_notify : {r}'.format(r=result)
 
             if self.get_contact():
-                print 'get_contacts:'
-                print '%d contacts' % len(self.contact_list)
+                print 'get_contacts: %d contacts' % len(self.contact_list)
                 # print self.contact_list
                 # print self.group_members_list
                 with open(os.path.join(self.resource_dir, 'contact_list.json'), 'w') as f:
@@ -433,7 +431,8 @@ class WeChat:
         return None
 
     def custom_message_receiver(self, msg):
-        # add custom message receiver by inheriting this func
+        # add custom message receiver in or by inheriting this func
+        print msg["msg_id"]
         print msg["hint"]
         pass
 
@@ -446,7 +445,7 @@ class WeChat:
             hint_msg = ''
 
             if msg_type == 1:  # text
-                hint_msg = msg
+                hint_msg = content
 
             elif msg_type == 3:  # image
                 image = self.get_msg_image(msg_id)
@@ -462,7 +461,7 @@ class WeChat:
                 # print('  nickname   : %s' % info['NickName'])
                 # print('  alias      : %s' % info['Alias'])
                 # print('  district   : %s %s' % (info['Province'], info['City']))
-                # print('  gender        : %s' % ['未知', '男', '女'][info['Sex']])
+                # print('  gender     : %s' % ['unknown', 'male', 'female'][info['Sex']])
             elif msg_type == 47:  # emotion
                 url = self.search_content('cdnurl', content, 'attr')
                 hint_msg = '%s send you emotion: %s' % (name, url)
@@ -485,14 +484,16 @@ class WeChat:
 
             elif msg_type == 51:  # init message
                 #hint_msg = '  contact init'
-                pass
+                return
 
             elif msg_type == 62:  # video
                 video = self.get_msg_video(msg_id)
                 hint_msg = '%s send you video : %s' % (name, video)
 
             elif msg_type == 10002:  # recall
-                hint_msg = '%s has recalled a message' % name
+                recall_msg_content = json.dumps(msg)
+                result = re.search('&lt;msgid&gt;([^&lt;]+)&lt;/msgid&gt;', recall_msg_content)
+                hint_msg = 'recalled message id: %s' % result.group(1)
 
             else:  # unknown
                 hint_msg = 'message type: %d, unknown message(maybe view it on phone)' % msg['MsgType']
