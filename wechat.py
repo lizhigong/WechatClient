@@ -449,11 +449,11 @@ class WeChat:
 
             elif msg_type == 3:  # image
                 image = self.get_msg_image(msg_id)
-                hint_msg = '%s send you image: %s' % (name, image)
+                hint_msg = '%s send image: %s' % (name, image)
 
             elif msg_type == 34:  # voice
                 voice = self.get_msg_voice(msg_id)
-                hint_msg = '%s send you voice: %s' % (name, voice)
+                hint_msg = '%s send voice: %s' % (name, voice)
 
             elif msg_type == 42:  # recommend card
                 info = msg['RecommendInfo']
@@ -464,7 +464,7 @@ class WeChat:
                 # print('  gender     : %s' % ['unknown', 'male', 'female'][info['Sex']])
             elif msg_type == 47:  # emotion
                 url = self.search_content('cdnurl', content, 'attr')
-                hint_msg = '%s send you emotion: %s' % (name, url)
+                hint_msg = '%s send emotion: %s' % (name, url)
 
             elif msg_type == 49:  # link
                 app_msg_type = defaultdict(lambda: "")
@@ -488,7 +488,7 @@ class WeChat:
 
             elif msg_type == 62:  # video
                 video = self.get_msg_video(msg_id)
-                hint_msg = '%s send you video : %s' % (name, video)
+                hint_msg = '%s send video : %s' % (name, video)
 
             elif msg_type == 10002:  # recall
                 recall_msg_content = json.dumps(msg)
