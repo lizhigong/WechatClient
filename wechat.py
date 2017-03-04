@@ -608,14 +608,14 @@ class WeChat:
 
         url = self.base_uri + '/webwxsendmsg?pass_ticket=%s' % self.pass_ticket
         params = {
-            'BaseRequest': self.base_request,
+            'BaseRequest'       : self.base_request,
             'Msg': {
-                "Type": 1,  # text
-                "Content": content,
-                "FromUserName": self.user_info['UserName'],
-                "ToUserName": dst_id,
-                "LocalID": msg_id,
-                "ClientMsgId": msg_id
+                'Type'          : 1,  # text
+                'Content'       : content,
+                'FromUserName'  : self.user_info['UserName'],
+                'ToUserName'    : dst_id,
+                'LocalID'       : msg_id,
+                'ClientMsgId'   : msg_id
             }
         }
         result = self.session.post(url, data=json.dumps(params).encode(self.encoding))
@@ -641,25 +641,25 @@ class WeChat:
 
         url = 'https://file.'+self.base_host+'/cgi-bin/mmwebwx-bin/webwxuploadmedia?f=json'
         upload_media_request = {
-            'BaseRequest': self.base_request,
-            'ClientMediaId': client_media_id,
-            'TotalLen': file_len,
-            'StartPos': 0,
-            'DataLen': file_len,
-            'MediaType': 4,
+            'BaseRequest'   : self.base_request,
+            'ClientMediaId' : client_media_id,
+            'TotalLen'      : file_len,
+            'StartPos'      : 0,
+            'DataLen'       : file_len,
+            'MediaType'     : 4,
         }
 
         params = {
-            'id': (None, 'WU_FILE_%s' % str(self.media_index)),
-            'name': (None, os.path.basename(path)),
-            'type': (None, file_type),
-            'lastModifiedDate': (None, last_modified_date),
-            'size': (None, file_len),
-            'mediatype': (None, media_type),
+            'id'                : (None, 'WU_FILE_%s' % str(self.media_index)),
+            'name'              : (None, os.path.basename(path)),
+            'type'              : (None, file_type),
+            'lastModifiedDate'  : (None, last_modified_date),
+            'size'              : (None, file_len),
+            'mediatype'         : (None, media_type),
             'uploadmediarequest': (None, json.dumps(upload_media_request)),
-            'webwx_data_ticket': (None, self.session.cookies['webwx_data_ticket']),
-            'pass_ticket': (None, self.pass_ticket),
-            'filename': (os.path.basename(path), open(path, 'rb'), file_type.split('/')[1]),
+            'webwx_data_ticket' : (None, self.session.cookies['webwx_data_ticket']),
+            'pass_ticket'       : (None, self.pass_ticket),
+            'filename'          : (os.path.basename(path), open(path, 'rb'), file_type.split('/')[1]),
         }
         r = self.session.post(url, files=params)
         self.media_index += 1
@@ -698,12 +698,12 @@ class WeChat:
         params = {
             'BaseRequest': self.base_request,
             'Msg': {
-                'Type': 3,
-                'MediaId': media_id,
-                'FromUserName': self.user_info['UserName'],
-                'ToUserName': dst_id,
-                'LocalID': str(time.time() * 1e7),
-                'ClientMsgId': str(time.time() * 1e7),
+                'Type'          : 3,
+                'MediaId'       : media_id,
+                'FromUserName'  : self.user_info['UserName'],
+                'ToUserName'    : dst_id,
+                'LocalID'       : str(time.time() * 1e7),
+                'ClientMsgId'   : str(time.time() * 1e7),
             },
         }
         if path[-4:] == '.gif':
