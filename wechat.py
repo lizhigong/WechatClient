@@ -11,6 +11,7 @@ import xml.dom.minidom
 from safesession import SafeSession
 import json
 from collections import defaultdict
+import multiprocessing
 
 
 class WeChat:
@@ -177,10 +178,12 @@ class WeChat:
             # result = self.send_text_message('123', 'ljy')
             # print 'send_text_message to user : {r}'.format(r=result)
 
-            self.message_listener()
+            # self.message_listener()
+            listener = multiprocessing.Process(target=self.message_listener())
+            listener.run()
 
         except KeyboardInterrupt:
-            print '^c command : QUIT'
+            print ' command : QUIT'
 
     def get_uuid(self):
         url = 'https://login.weixin.qq.com/jslogin'
