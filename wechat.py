@@ -65,6 +65,12 @@ class WeChat:
 
         self.encry_chat_room_id_list = []  # for group members' head img
 
+    def __unicode__(self, string, encoding='utf-8'):
+        if isinstance(string, str):
+            return string.decode(encoding)
+        elif isinstance(string, unicode):
+            return string
+
     def _refresh_contact(self):
         self.contact_list = []
         self.public_list = []
@@ -167,6 +173,9 @@ class WeChat:
                     f.write(json.dumps(self.group_members_list))
                 with open(os.path.join(self.resource_dir, 'account_info.json'), 'w') as f:
                     f.write(json.dumps(self.account_info))
+
+            # result = self.send_text_message('123', 'ljy')
+            # print 'send_text_message to user : {r}'.format(r=result)
 
             self.message_listener()
 
@@ -518,7 +527,6 @@ class WeChat:
             elif retcode == '1101':  # login at another device
                 break
             elif retcode == '0':
-                # print '[DEBUG] selector_check:', retcode, selector
                 if selector == '2':  # new message
                     r = self.sync()
                     if r is not None:
@@ -542,7 +550,52 @@ class WeChat:
                 elif selector == '0':  # none
                     pass
                 else:
-                    print '[ERROR] Unknown error'
+                    print 'Unknown error'
             current_check_time = time.time() - current_check_time
             if current_check_time < self.sync_time_interval:
                 time.sleep(self.sync_time_interval - current_check_time)
+
+    def send_text_message(self, content, dst):
+        content = self.__unicode__(content)
+        msg_id = str(int(time.time() * 1000)) + str(random.random())[:5].replace('.', '')
+        print msg_id
+        if dst == '':
+            return False
+        dst = self.__unicode__(dst)
+        dst_id = ''
+        for contact in self.contact_list:
+            if 'RemarkName' in contact and contact['RemarkName'] == dst:
+                dst_id = contact['UserName']
+            if 'NickName' in contact and contact['NickName'] == dst:
+                dst_id = contact['UserName']
+            if 'DisplayName' in contact and contact['DisplayName'] == dst:
+                dst_id = contact['UserName']
+        for group in self.group_list:
+            if 'RemarkName' in group and group['RemarkName'] == dst:
+                dst_id = group['UserName']
+            if 'NickName' in group and group['NickName'] == dst:
+                dst_id = group['UserName']
+            if 'DisplayName' in group and group['DisplayName'] == dst:
+                dst_id = group['UserName']
+        if dst_id == '':
+            return False
+
+        url = self.base_uri + '/webwxsendmsg?pass_ticket=%s' % self.pass_ticket
+        params = {
+            'BaseRequest': self.base_request,
+            'Msg': {
+                "Type": 1,  # text
+                "Content": content,
+                "FromUserName": self.user_info['UserName'],
+                "ToUserName": dst_id,
+                "LocalID": msg_id,
+                "ClientMsgId": msg_id
+            }
+        }
+        result = self.session.post(url, data=json.dumps(params).encode(self.encoding))
+        # print result.json()
+        if result == '':
+            return False
+        return result.json()['BaseResponse']['Ret'] == 0
+
+
