@@ -13,7 +13,6 @@ import json
 from collections import defaultdict
 import multiprocessing
 import mimetypes
-from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 
 class WeChat:
