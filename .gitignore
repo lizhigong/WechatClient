@@ -1,5 +1,6 @@
 .idea/
 temp/
+resource/
 test/
 *.pyc
 

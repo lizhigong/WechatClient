@@ -12,6 +12,8 @@ from safesession import SafeSession
 import json
 from collections import defaultdict
 import multiprocessing
+import mimetypes
+from requests_toolbelt.multipart.encoder import MultipartEncoder
 
 
 class WeChat:
@@ -20,7 +22,11 @@ class WeChat:
         self.mode = 1  # debug mode
         self.session = SafeSession()
         self.encoding = 'utf-8'
-        self.resource_dir = os.path.join(os.getcwd(),'temp')
+        self.resource_dir = os.path.join(os.getcwd(), 'resource')
+        self.img_resource_dir = os.path.join(os.getcwd(), 'resource', 'image')
+        self.voice_resource_dir = os.path.join(os.getcwd(), 'resource', 'voice')
+        self.video_resource_dir = os.path.join(os.getcwd(), 'resource', 'video')
+        self._check_and_create_dir()
         self.login_retry_times = 10
         self.login_retry_interval = 1  # seconds
         self.timeout = 60  # seconds
@@ -51,6 +57,7 @@ class WeChat:
         self.sync_key = []
         self.sync_check_key = ''  # formatted sync key for sync check
         self.sync_check_host = ''
+        self.media_index = 0
 
         self.user_info = {}  # UserName->id, NickName->nickname, HeadImgUrl
         self.account_info = {'group_member': {}, 'normal_member': {}}  # all the accounts
@@ -76,6 +83,16 @@ class WeChat:
         self.contact_list = []
         self.public_list = []
         self.group_list = []
+
+    def _check_and_create_dir(self):
+        if not os.path.exists(self.resource_dir):
+            os.makedirs(self.resource_dir)
+        if not os.path.exists(self.img_resource_dir):
+            os.makedirs(self.img_resource_dir)
+        if not os.path.exists(self.video_resource_dir):
+            os.makedirs(self.video_resource_dir)
+        if not os.path.exists(self.voice_resource_dir):
+            os.makedirs(self.voice_resource_dir)
 
     def get_display_name(self, id):
         # [TODO]
@@ -114,7 +131,7 @@ class WeChat:
         r = self.session.get(url)
         data = r.content
         fn = 'img_' + msg_id + '.jpg'
-        with open(os.path.join(self.resource_dir, 'image', fn), 'wb') as f:
+        with open(os.path.join(self.img_resource_dir, fn), 'wb') as f:
             f.write(data)
         return fn
 
@@ -123,7 +140,7 @@ class WeChat:
         r = self.session.get(url)
         data = r.content
         fn = 'voice_' + msg_id + '.mp3'
-        with open(os.path.join(self.resource_dir, 'voice', fn), 'wb') as f:
+        with open(os.path.join(self.voice_resource_dir, fn), 'wb') as f:
             f.write(data)
         return fn
 
@@ -135,7 +152,7 @@ class WeChat:
         r = self.session.get(url, headers=headers)
         data = r.content
         fn = 'video_' + msg_id + '.mp4'
-        with open(os.path.join(self.resource_dir, 'video', fn), 'wb') as f:
+        with open(os.path.join(self.video_resource_dir, fn), 'wb') as f:
             f.write(data)
         return fn
 
@@ -178,9 +195,15 @@ class WeChat:
             # result = self.send_text_message('123', 'ljy')
             # print 'send_text_message to user : {r}'.format(r=result)
 
+            # self.upload_media('siri.jpeg')
+            # self.upload_media('safesession.py')
+            # result = self.send_image_and_emotion_message('siri.jpeg', 'ljy')
+            # print  'send_image_and_emotion_message to user : {r}'.format(r=result)
+
             # self.message_listener()
             listener = multiprocessing.Process(target=self.message_listener())
             listener.run()
+
 
         except KeyboardInterrupt:
             print ' command : QUIT'
@@ -561,7 +584,7 @@ class WeChat:
     def send_text_message(self, content, dst):
         content = self.__unicode__(content)
         msg_id = str(int(time.time() * 1000)) + str(random.random())[:5].replace('.', '')
-        print msg_id
+        # print msg_id
         if dst == '':
             return False
         dst = self.__unicode__(dst)
@@ -601,4 +624,97 @@ class WeChat:
             return False
         return result.json()['BaseResponse']['Ret'] == 0
 
+    def upload_media(self, path):
+        if not os.path.exists(path=path):
+            return None
 
+        file_len = str(os.path.getsize(path))
+        file_type = mimetypes.guess_type(path, strict=False)[0]
+        media_type = ''
+        if file_type.split('/')[0] == 'image':
+            media_type = 'pic'
+        else:
+            media_type = 'doc'
+        # print media_type
+        last_modified_date = time.strftime('%m/%d/%Y, %H:%M:%S GMT+0800 (CST)')
+        client_media_id = str(int(time.time() * 1000)) + str(random.random())[:5].replace('.', '')
+
+        url = 'https://file.'+self.base_host+'/cgi-bin/mmwebwx-bin/webwxuploadmedia?f=json'
+        upload_media_request = {
+            'BaseRequest': self.base_request,
+            'ClientMediaId': client_media_id,
+            'TotalLen': file_len,
+            'StartPos': 0,
+            'DataLen': file_len,
+            'MediaType': 4,
+        }
+
+        params = {
+            'id': (None, 'WU_FILE_%s' % str(self.media_index)),
+            'name': (None, os.path.basename(path)),
+            'type': (None, file_type),
+            'lastModifiedDate': (None, last_modified_date),
+            'size': (None, file_len),
+            'mediatype': (None, media_type),
+            'uploadmediarequest': (None, json.dumps(upload_media_request)),
+            'webwx_data_ticket': (None, self.session.cookies['webwx_data_ticket']),
+            'pass_ticket': (None, self.pass_ticket),
+            'filename': (os.path.basename(path), open(path, 'rb'), file_type.split('/')[1]),
+        }
+        r = self.session.post(url, files=params)
+        self.media_index += 1
+        # print r.json()
+        if r == '':
+            return None
+        media_id = json.loads(r.text)['MediaId']
+        return media_id
+
+    def send_image_and_emotion_message(self, path, dst):
+        media_id = self.upload_media(path)
+        if media_id is None:
+            return False
+        if dst == '':
+            return False
+        dst = self.__unicode__(dst)
+        dst_id = ''
+        for contact in self.contact_list:
+            if 'RemarkName' in contact and contact['RemarkName'] == dst:
+                dst_id = contact['UserName']
+            if 'NickName' in contact and contact['NickName'] == dst:
+                dst_id = contact['UserName']
+            if 'DisplayName' in contact and contact['DisplayName'] == dst:
+                dst_id = contact['UserName']
+        for group in self.group_list:
+            if 'RemarkName' in group and group['RemarkName'] == dst:
+                dst_id = group['UserName']
+            if 'NickName' in group and group['NickName'] == dst:
+                dst_id = group['UserName']
+            if 'DisplayName' in group and group['DisplayName'] == dst:
+                dst_id = group['UserName']
+        if dst_id == '':
+            return False
+
+        url = self.base_uri + '/webwxsendmsgimg?fun=async&f=json'
+        params = {
+            'BaseRequest': self.base_request,
+            'Msg': {
+                'Type': 3,
+                'MediaId': media_id,
+                'FromUserName': self.user_info['UserName'],
+                'ToUserName': dst_id,
+                'LocalID': str(time.time() * 1e7),
+                'ClientMsgId': str(time.time() * 1e7),
+            },
+        }
+        if path[-4:] == '.gif':
+            url = self.base_uri + '/webwxsendemoticon?fun=sys'
+            params['Msg']['Type'] = 47
+            params['Msg']['EmojiFlag'] = 2
+
+        r = self.session.post(url, data=json.dumps(params))
+        if r == '':
+            return False
+        if json.loads(r.text)['BaseResponse']['Ret'] == 0:
+            return True
+        else:
+            return False
