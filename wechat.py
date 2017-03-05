@@ -30,9 +30,7 @@ class WeChat:
         self.login_retry_interval = 1  # seconds
         self.timeout = 60  # seconds
         self.sync_time_interval = 1  # seconds
-        self.default_sync_host = ['webpush.wx.qq.com', 'webpush2.wx.qq.com', 'webpush.wechat.com',
-                                  'webpush1.wechat.com', 'webpush2.wechat.com', 'webpush.wechatapp.com',
-                                  'webpush1.wechatapp.com']  # sync check hosts
+        self.default_sync_host = ['webpush.wx.qq.com', 'wx2.qq.com']  # sync check hosts
         self.default_special_accounts = ['newsapp', 'filehelper', 'weibo', 'qqmail',
                  'fmessage', 'tmessage', 'qmessage', 'qqsync', 'floatbottle',
                  'lbsapp', 'shakeapp', 'medianote', 'qqfriend', 'readerapp',
